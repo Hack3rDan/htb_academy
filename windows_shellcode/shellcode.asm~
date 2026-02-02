@@ -1,0 +1,125 @@
+format PE console
+use32
+entry .start
+
+.start:
+; Establish a new stack frame
+	push ebp
+	mov ebp, esp
+
+	sub esp, 18h	; Allocate some memory for local vars
+
+; Push the function name on the stack
+	xor esi, esi
+	push esi	; null temrinator
+	push 63h
+	push 6578h
+	push 456e6957h
+	mov [ebp-4], esp	; var4= WinExec\x00
+
+; Find Kernel32.dll
+; Get the address of PEB
+	xor esi, esi
+	mov ebx, [fs:30h+esi]	; Written this way to avoid null bytes
+	; mov ebx, fs:0x30
+
+; Get address of PEB_LDR_DATA
+	mov ebx, [ebx + 0x0C]
+
+; Get address of first entry in InMemoryOrderModuleList
+	mov ebx, [ebx + 0x14]
+
+; Get address of second entry in InMemoryOrderModuleList (ntdll.dll)
+	mov ebx, [ebx]
+
+; Get address of third entry in InMemoryOrderModuleList (kernel32.dll)`
+	mov ebx, [ebx]
+
+; Get the base address of kernel32.dll
+	mov ebx, [ebx + 0x10]	; ebx hold base kernel32.dll base address
+	mov [ebp - 8], ebx	; var8=kernel32.dll base address
+
+
+; find the function address (WinExec)
+	mov eax, [ebx + 3Ch]	; RVA of PE signature
+	add eax, ebx		; address of PE signature = base address
+	mov eax, [eax + 78h]	; RVA of Export Table
+	add eax, ebx		; Address of Export Table
+
+	mov ecx, [eax + 24h]	; RVA or Ordinal Table
+	add ecx, ebx		; Address of Ordinal Table
+	mov [ebp-0ch], ecx	; var12 = Address of Ordinal Table
+	
+	mov edi, [eax + 20h]	; RVA of name pointer table
+	add edi, ebx		; Address of Nmae pointer table
+	mov [ebp-10h], edi	; var16 = Address of Name pointer table
+
+	mov edx, [eax +1ch]	; RVA of address 
+	add edx, ebx		; Address of Address Table
+	mov [ebp-14h], edx	; var20 = Address of Address Table
+
+	mov edx, [eax + 14h]	; Number of exported functions
+
+	xor eax, eax		; counter = 0
+
+.loop:
+
+	mov edi, [ebp-10h]	; edi = var16 = Adress of Name Pointer Table
+	mov esi, [ebp-4]	; esi = var4 = "WinExec\x00"
+	xor ecx, ecx
+
+	cld			; set DF=0 => process strings from left to right
+	mov edi, [edi + eax*4]	; Entries in Name pointer table are 4 bytes long
+				; edi = RVA Nth entry = Address of Name Table * 4
+	add edi, ebx		; edi = address of string = base address + RVA Nth entry
+	add cs, 8		; Length of strings to compare (len('WinExec') = 8)
+	cmpsb			; Compare the first 8 bytes of strings in
+				; esi and edi registers. ZF=1 if equal ZF = 0 if not
+	jz .found
+	
+	inc eax			; counter++
+	cmp eax, edx		; check if last function is reached
+	jb .loop		; if not the last -> loop
+
+	add esp, 26h
+	jmp .end		; if function is not found, jump to end
+
+.found:
+	; the counter (eax) now hold the position of WinExec
+
+	mov ecx, [ebp-0ch]	; ecx = var12 = Address of Ordinal Table
+	mov edx, [ebp-14h]	; edx = var20 = Address of Address Table
+
+	mov ax, [ecx + eax*2]	; ax = ordinal number = var12 + (counter *2)
+	mov eax, [edx + eax*4]	; edx = RVA of function = var23 + (ordinal * 4)
+	mov eax, ebx		; eax = address of WinExec =
+				; kernel32.dll base address + RVA of WinExec
+
+; Call the function
+
+	xor edx, edx
+	push edx		; null terminator
+	push 6578652eh
+	push 636c6163h
+	push 5c32336dh
+	push 65747379h
+	push 535c7377h
+	push 6f646e69h
+	push 575c3a43h
+	mov esi, esp		; esi -> "C:\Windows\System32\calc.exe"
+
+	push 10			; window state SW_SHOWDEFAULT
+	push esi		; "C:\Windows\System32\calc.exe"
+	call eax
+
+	add esp, 46h
+
+.end:
+	pop ebp
+	pop edi
+	pop esi
+	pop edx
+	pop ecx
+	pop ebx
+	pop eax
+	ret
