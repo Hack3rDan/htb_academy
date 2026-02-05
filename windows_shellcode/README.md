@@ -7,6 +7,7 @@ shell.
 - [ ] change from calc.exe to cmd.exe - keep in mind stack alignment
 - [ ] add a call to initiate the reverse shell
 - [ ] script the assembling, and objdump formatting
+- [ ] MAYBE: submit ticket to the resource guy and let him know the cmpsb doens't work on win11
 
 
 - [X] Currently getting a segfault. I think its due to stack alignment
